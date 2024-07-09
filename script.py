@@ -3,6 +3,7 @@ import shutil
 import torch
 import clip
 import numpy as np
+import schedule
 
 from collections import defaultdict
 from PIL import Image
@@ -123,7 +124,7 @@ class script:
         '''
         Function to run the script every 24 hours (or any other time periods that you want)
         '''
-        pass
+        schedule.every().wednesday.at("12:00").do(script.main)
 
 desktop_pathname = os.path.join(os.path.expanduser("~", "Desktop"))
 run = script(desktop_pathname)

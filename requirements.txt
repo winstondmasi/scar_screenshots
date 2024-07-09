@@ -11,6 +11,7 @@ numpy==2.0.0
 packaging==24.1
 pillow==10.4.0
 regex==2024.5.15
+schedule==1.2.2
 scikit-learn==1.5.1
 scipy==1.13.1
 sympy==1.12.1
