@@ -4,28 +4,38 @@ import torch
 import clip
 import numpy as np
 import schedule
+import json
 
-from collections import defaultdict
 from PIL import Image
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
+from collections import defaultdict
+from sklearn.metrics.pairwise import cosine_similarity
 
-class script:
+class Script:
     def __init__(self , desktop_location):
         self.desktop_location = desktop_location
         
     def main(self):
         files = self.desktop_location
 
-        screenshot = script.get_all_files(files)
+        screenshot = Script.get_all_files(files)
 
-        embeddings = [script.get_vector_embeddings(file) for file in screenshot]
+        embeddings = [Script.get_vector_embeddings(file) for file in screenshot]
 
-        similarity = script.compare_embeddings(embeddings)
+        embeddings_array = np.array(embeddings)
 
-        clusters = script.classify_images(screenshot, similarity)
+        # write the embeddings to a file for examination
+        np.savetxt('embeddings.txt', embeddings_array)
         
-        script.make_folders_and_place_files(screenshot, clusters)
+        similarity = Script.compare_embeddings(embeddings_array)
+
+        np.savetxt('cosine_similarity.txt', similarity)
+
+        clusters = Script.classify_images(screenshot, similarity)
+        
+        # Script.make_folders_and_place_files(screenshot, clusters)
+
+        return clusters
 
     def is_screenshot(files):
         '''
@@ -44,17 +54,16 @@ class script:
         ''' 
         resulting_filenames = []
 
-        for file in directory:
-            filename = os.fsdecode(file)
-            if script.is_screenshot(filename) and filename.endswith(('.png', '.jpeg', '.gif')): 
-                resulting_filenames.append(filename)
+        for file in os.listdir(directory):
+            file_path = os.path.join(directory, file)
+            if Script.is_screenshot(file_path) and file_path.endswith(('.png', '.jpeg', '.gif')): 
+                resulting_filenames.append(file_path)
 
         return resulting_filenames
 
     def get_vector_embeddings(image_path):
         '''
         Get Vector embeddings of each screenshot using OPENAI CLIP
-        and compare the vectors of the files gotten using cosine similarity
         '''
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -68,33 +77,41 @@ class script:
         image_features /= image_features.norm(dim=-1, keepdim=True)
 
         # convert to numpy arrays
-        return image_features.cpu().np()
+        numpy_array = image_features.cpu().numpy().flatten()
 
-    def compare_embeddings(list_of_embeddings):
+        return numpy_array
+
+    def compare_embeddings(emebeddings_array):
         '''
         Function to compare the vectors of the files gotten using cosine similarity
         '''
-        embeddings_array = np.array(list_of_embeddings)
-
-        similarity = cosine_similarity(embeddings_array)
-
+        similarity = cosine_similarity(emebeddings_array)
+        
         return similarity
+
+    from sklearn.cluster import KMeans
 
     def classify_images(screenshot_list, similarity_matrix):
         '''
-        Classify the images based on the vector embeddings using k-means clusteriing
+        Classify the images based on the vector embeddings using k-means clustering
+        and write the results to a file.
         '''
         resulting_dictionary = {}
-        num_clusters = 2
-
+        num_clusters = 5
         kmeans = KMeans(n_clusters=num_clusters, random_state=0)
         kmeans.fit(similarity_matrix)
-
         labels = kmeans.labels_
 
-        for image_path, label in zip(screenshot_list, labels):
-            print(f"IMAGE {image_path} belongs to the CLUSTER {label}")
-            resulting_dictionary[image_path] = label
+        with open('locations.txt', 'w') as files:
+            for image_path, label in zip(screenshot_list, labels):
+                cluster_info = f"IMAGE {image_path} belongs to the CLUSTER {label}"
+                #print(cluster_info)
+                files.write(cluster_info + '\n')
+                resulting_dictionary[image_path] = int(label)
+
+            # Write the entire dictionary to the file
+            files.write('\n--- Full Classification Dictionary ---\n')
+            json.dump(resulting_dictionary, files, indent=2)
         return resulting_dictionary
 
 
@@ -122,11 +139,11 @@ class script:
 
     def setup_cron_job():
         '''
-        Function to run the script every 24 hours (or any other time periods that you want)
+        Function to run the Script every 24 hours (or any other time periods that you want)
         '''
-        schedule.every().wednesday.at("12:00").do(script.main)
+        schedule.every().wednesday.at("12:00").do(Script.main)
 
-desktop_pathname = os.path.join(os.path.expanduser("~", "Desktop"))
-run = script(desktop_pathname)
-run.main() # run once 
+desktop_pathname = os.path.join(os.path.expanduser("~"), "Desktop")
+run = Script(desktop_pathname)
+run.main() # run once
 # run.setup_cron_job() # run multiple times over a set period
