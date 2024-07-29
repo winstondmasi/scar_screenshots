@@ -138,80 +138,6 @@ class Script:
         print(f"The number of keys is : {len(grouped_res.keys())}\n\n")
         return grouped_res
 
-    def get_features_from_dataset(dataset):
-        '''
-        Function to extract features and labels from Dataset: see lines 24 - 28 (feel free to change dataset at ones discreation)
-        '''
-        all_features = []
-        all_labels = []
-
-        with torch.no_grad():
-            for images, labels in tqdm(DataLoader(dataset, batch_size=100)):
-                features = Script.model.encode_image(images.to(Script.device))
-                
-                all_features.append(features)
-                all_labels.append(labels)
-        return torch.cat(all_features).cpu().numpy()
-    
-    def calc_image_features(map_of_clusters):
-        '''
-        Calculate the image features of each cluster and perform logistic regression classification
-        '''
-
-        train_features, train_labels = Script.get_features_from_dataset(Script.train)
-        test_features, test_labels = Script.get_features_from_dataset(Script.test)
-
-        classifier = LogisticRegression(random_state=0).fit(train_features, train_labels)
-        predictions = classifier.predict(test_features)
-
-        accuracy = np.mean((test_labels == predictions).astype(np.float) * 100)
-        print(f"Accuracy is : {accuracy:.3f}%")
-
-        return predictions
-    
-    def get_keywords_from_predictions(predictions):
-        '''
-        Get the keywords from the predictions
-        '''
-
-        # Map CIFAR100 class indices to human-readable labels
-        cifar100_labels = [
-            'apple', 'aquarium_fish', 'baby', 'bear', 'beaver', 'bed', 'bee', 'beetle', 
-            'bicycle', 'bottle', 'bowl', 'boy', 'bridge', 'bus', 'butterfly', 'camel', 
-            'can', 'castle', 'caterpillar', 'cattle', 'chair', 'chimpanzee', 'clock', 
-            'cloud', 'cockroach', 'couch', 'crab', 'crocodile', 'cup', 'dinosaur', 
-            'dolphin', 'elephant', 'flatfish', 'forest', 'fox', 'girl', 'hamster', 
-            'house', 'kangaroo', 'keyboard', 'lamp', 'lawn_mower', 'leopard', 'lion', 
-            'lizard', 'lobster', 'man', 'maple_tree', 'motorcycle', 'mountain', 'mouse', 
-            'mushroom', 'oak_tree', 'orange', 'orchid', 'otter', 'palm_tree', 'pear', 
-            'pickup_truck', 'pine_tree', 'plain', 'plate', 'poppy', 'porcupine', 
-            'possum', 'rabbit', 'raccoon', 'ray', 'road', 'rocket', 'rose', 'sea', 
-            'seal', 'shark', 'shrew', 'skunk', 'skyscraper', 'snail', 'snake', 'spider', 
-            'squirrel', 'streetcar', 'sunflower', 'sweet_pepper', 'table', 'tank', 
-            'telephone', 'television', 'tiger', 'tractor', 'train', 'trout', 'tulip', 
-            'turtle', 'wardrobe', 'whale', 'willow_tree', 'wolf', 'woman', 'worm'
-        ]
-        
-        # Count occurrences of each class
-        class_counts = {}
-        for pred in predictions:
-            if pred in class_counts:
-                class_counts[pred] += 1
-            else:
-                class_counts[pred] = 1
-        
-        # Sort classes by frequency
-        sorted_classes = sorted(class_counts.items(), key=lambda x: x[1], reverse=True)
-        
-        # Create a dictionary mapping cluster numbers to top 3 most frequent class labels
-        keywords = {}
-        for i, (class_idx, _) in enumerate(sorted_classes):
-            keywords[i] = [cifar100_labels[class_idx]]
-            if len(keywords[i]) < 3 and i + 1 < len(sorted_classes):
-                keywords[i].extend([cifar100_labels[sorted_classes[i+1][0]], cifar100_labels[sorted_classes[i+2][0]]])
-        
-        return keywords
-
     def create_folders_and_place_files(folder_name, image_path):
         '''
         Process clusters by making folders and placing respective files there
@@ -230,12 +156,12 @@ class Script:
         
         grouped_res = Script.group_images_by_label(clusters)
 
-        extracted_featues_dict = Script.calc_image_features(grouped_res)
-        gotten_keywords = Script.get_keywords_from_predictions(extracted_featues_dict)
-
-        for image_path, label in grouped_res.items():
-            folder_name = gotten_keywords.get(label, f"cluster_{label}")
-            Script.create_folders_and_place_files(folder_name, image_path)
+        files_moved = 0
+        for image_paths, label in grouped_res.items():
+            folder_name = f"cluster_{label}"
+            for image_path in image_paths:
+                Script.create_folders_and_place_files(folder_name, image_path)
+                files_moved += 1
 
         summary = {
         "folders_created": len(set(clusters.values())),
@@ -259,7 +185,7 @@ class Script:
 
         # set job to run every wednesday at 12:00
         job.setall("0 12 * * 3")
-        
+
         cron.write()
         print("Cron job created successfully")
 
