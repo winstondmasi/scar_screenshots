@@ -3,11 +3,12 @@ import shutil
 import torch
 import clip
 import numpy as np
-import schedule
+import sys
 import json
 
 from tqdm import tqdm
 from PIL import Image
+from crontab import CronTab
 from sklearn.cluster import KMeans
 from collections import defaultdict
 from torchvision.datasets import CIFAR100
@@ -47,9 +48,9 @@ class Script:
 
         clusters = Script.classify_images(screenshot, similarity)
         
-        # make_files = Script.make_folders_and_place_files(screenshot, clusters)
+        organization_result = Script.make_folders_and_place_files(screenshot, clusters)
 
-        return clusters
+        return clusters, organization_result
 
     def is_screenshot(files):
         '''
@@ -172,7 +173,44 @@ class Script:
         '''
         Get the keywords from the predictions
         '''
-        pass
+
+        # Map CIFAR100 class indices to human-readable labels
+        cifar100_labels = [
+            'apple', 'aquarium_fish', 'baby', 'bear', 'beaver', 'bed', 'bee', 'beetle', 
+            'bicycle', 'bottle', 'bowl', 'boy', 'bridge', 'bus', 'butterfly', 'camel', 
+            'can', 'castle', 'caterpillar', 'cattle', 'chair', 'chimpanzee', 'clock', 
+            'cloud', 'cockroach', 'couch', 'crab', 'crocodile', 'cup', 'dinosaur', 
+            'dolphin', 'elephant', 'flatfish', 'forest', 'fox', 'girl', 'hamster', 
+            'house', 'kangaroo', 'keyboard', 'lamp', 'lawn_mower', 'leopard', 'lion', 
+            'lizard', 'lobster', 'man', 'maple_tree', 'motorcycle', 'mountain', 'mouse', 
+            'mushroom', 'oak_tree', 'orange', 'orchid', 'otter', 'palm_tree', 'pear', 
+            'pickup_truck', 'pine_tree', 'plain', 'plate', 'poppy', 'porcupine', 
+            'possum', 'rabbit', 'raccoon', 'ray', 'road', 'rocket', 'rose', 'sea', 
+            'seal', 'shark', 'shrew', 'skunk', 'skyscraper', 'snail', 'snake', 'spider', 
+            'squirrel', 'streetcar', 'sunflower', 'sweet_pepper', 'table', 'tank', 
+            'telephone', 'television', 'tiger', 'tractor', 'train', 'trout', 'tulip', 
+            'turtle', 'wardrobe', 'whale', 'willow_tree', 'wolf', 'woman', 'worm'
+        ]
+        
+        # Count occurrences of each class
+        class_counts = {}
+        for pred in predictions:
+            if pred in class_counts:
+                class_counts[pred] += 1
+            else:
+                class_counts[pred] = 1
+        
+        # Sort classes by frequency
+        sorted_classes = sorted(class_counts.items(), key=lambda x: x[1], reverse=True)
+        
+        # Create a dictionary mapping cluster numbers to top 3 most frequent class labels
+        keywords = {}
+        for i, (class_idx, _) in enumerate(sorted_classes):
+            keywords[i] = [cifar100_labels[class_idx]]
+            if len(keywords[i]) < 3 and i + 1 < len(sorted_classes):
+                keywords[i].extend([cifar100_labels[sorted_classes[i+1][0]], cifar100_labels[sorted_classes[i+2][0]]])
+        
+        return keywords
 
     def create_folders_and_place_files(folder_name, image_path):
         '''
@@ -182,7 +220,7 @@ class Script:
         newpath = '/Desktop/' + folder_name
         if not os.path.exists(newpath):
             os.mkdir(newpath)
-        shutil.move(os.path.join(newpath, os.path.basename(image_path)))
+        shutil.move(image_path, os.path.join(newpath, os.path.basename(image_path)))
             
     
     def make_folders_and_place_files(files, clusters):
@@ -199,11 +237,31 @@ class Script:
             folder_name = gotten_keywords.get(label, f"cluster_{label}")
             Script.create_folders_and_place_files(folder_name, image_path)
 
+        summary = {
+        "folders_created": len(set(clusters.values())),
+        "files_moved": len(files)
+        }
+        return summary
+
     def setup_cron_job():
         '''
         Function to run the Script every 24 hours (or any other time periods that you want)
         '''
-        schedule.every().wednesday.at("12:00").do(Script.main)
+        # get path to current script and python interpreter
+        script_path = os.path.abspath(__file__)
+        python_path = sys.executable
+
+        cron = CronTab(user=True)
+
+        command = f"{python_path} {script_path}"
+
+        job = cron.new(command=command)
+
+        # set job to run every wednesday at 12:00
+        job.setall("0 12 * * 3")
+        
+        cron.write()
+        print("Cron job created successfully")
 
 desktop_pathname = os.path.join(os.path.expanduser("~"), "Desktop")
 run = Script(desktop_pathname)
