@@ -13,7 +13,7 @@ pip install -r requirements.txt
 
 To run the script, use the following command:
 ```
-python script.py
+python3 script.py
 ```
 
 The script will automatically organize your screenshots into labeled folders. The script uses the OpenAI CLIP model to get vector embeddings of each screenshot. It then uses k-means clustering to classify the images.
