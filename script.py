@@ -20,11 +20,11 @@ class Script:
         
     def main(self):
         print("Starting Script")
-        print(f"Do you want to run this script once or a cron job (every wednesday at 12:00) 
-              \n 1. Once 
-              \n 2. Multiple times
-              \n 3. Delete cron job
-              \n 4. Exit")
+        print("Choose an option:")
+        print("1. Run the script once")
+        print("2. Set up a cron job (run every Wednesday at 12:00)")
+        print("3. Delete the cron job")
+        print("4. Exit")
 
         choice = int(input("Enter your choice (1-4): "))
 
@@ -156,7 +156,7 @@ class Script:
         shutil.move(image_path, os.path.join(newpath, os.path.basename(image_path)))
             
     
-    def make_folders_and_place_files(desktop_location,files, clusters):
+    def make_folders_and_place_files(desktop_location, files, clusters):
         '''
         Process clusters by making folders and placing respective files there
         '''
@@ -164,16 +164,17 @@ class Script:
         grouped_res = Script.group_images_by_label(clusters)
 
         files_moved = 0
-        for image_paths, label in grouped_res.items():
+        for label, image_paths in grouped_res.items():
             folder_name = f"cluster_{label}"
             for image_path in image_paths:
-                Script.create_folders_and_place_files(desktop_location,folder_name, image_path)
+                Script.create_folders_and_place_files(desktop_location, folder_name, image_path)
                 files_moved += 1
 
         summary = {
-        "folders_created": len(set(clusters.values())),
-        "files_moved": len(files)
+        "folders_created": len(grouped_res),
+        "files_moved": files_moved
         }
+        print(summary)
         return summary
 
     def setup_cron_job():
