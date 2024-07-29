@@ -11,46 +11,53 @@ from PIL import Image
 from crontab import CronTab
 from sklearn.cluster import KMeans
 from collections import defaultdict
-from torchvision.datasets import CIFAR100
-from torch.utils.data import DataLoader
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics.pairwise import cosine_similarity
 
 class Script:
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = clip.load("ViT-B/32", device=device)
-    preprocess = clip.load("ViT-B/32", device=device)
-
-    # load dataset
-    root = os.path.expanduser("~/.cache")
-    train = CIFAR100(root, download=True, train=True, transform=preprocess)
-    test = CIFAR100(root, download=True, train=True, transform=preprocess)
 
     def __init__(self , desktop_location):
         self.desktop_location = desktop_location
         
     def main(self):
-        files = self.desktop_location
+        print("Starting Script")
+        print(f"Do you want to run this script once or a cron job (every wednesday at 12:00) 
+              \n 1. Once 
+              \n 2. Multiple times
+              \n 3. Delete cron job
+              \n 4. Exit")
 
-        screenshot = Script.get_all_files(files)
+        choice = int(input("Enter your choice (1-4): "))
 
-        embeddings = [Script.get_vector_embeddings(file) for file in screenshot]
+        if choice == 1:
+            files = self.desktop_location
 
-        embeddings_array = np.array(embeddings)
+            screenshot = Script.get_all_files(files)
 
-        # write the embeddings to a file for examination
-        np.savetxt('embeddings.txt', embeddings_array)
-        
-        similarity = Script.compare_embeddings(embeddings_array)
+            embeddings = [Script.get_vector_embeddings(file) for file in screenshot]
 
-        np.savetxt('cosine_similarity.txt', similarity)
+            embeddings_array = np.array(embeddings)
 
-        clusters = Script.classify_images(screenshot, similarity)
-        
-        organization_result = Script.make_folders_and_place_files(screenshot, clusters)
+            # write the embeddings to a file for examination
+            np.savetxt('embeddings.txt', embeddings_array)
+            
+            similarity = Script.compare_embeddings(embeddings_array)
 
-        return clusters, organization_result
+            np.savetxt('cosine_similarity.txt', similarity)
+
+            clusters = Script.classify_images(screenshot, similarity)
+            
+            organization_result = Script.make_folders_and_place_files(self.desktop_location,screenshot, clusters)
+
+            return clusters, organization_result
+        elif choice == 2:
+            self.setup_cron_job()
+        elif choice == 3:
+            self.delete_cron_job()
+        elif choice == 4:
+            print("Exiting Script")
+            return None
+        else:
+            print("Invalid choice. pick between 1 - 4.")
 
     def is_screenshot(files):
         '''
@@ -138,18 +145,18 @@ class Script:
         print(f"The number of keys is : {len(grouped_res.keys())}\n\n")
         return grouped_res
 
-    def create_folders_and_place_files(folder_name, image_path):
+    def create_folders_and_place_files(desktop_location,folder_name, image_path):
         '''
         Process clusters by making folders and placing respective files there
         '''
         # make folder in desktop based on the label name and place files there
-        newpath = '/Desktop/' + folder_name
+        newpath = os.path.join(desktop_location, folder_name)
         if not os.path.exists(newpath):
             os.mkdir(newpath)
         shutil.move(image_path, os.path.join(newpath, os.path.basename(image_path)))
             
     
-    def make_folders_and_place_files(files, clusters):
+    def make_folders_and_place_files(desktop_location,files, clusters):
         '''
         Process clusters by making folders and placing respective files there
         '''
@@ -160,7 +167,7 @@ class Script:
         for image_paths, label in grouped_res.items():
             folder_name = f"cluster_{label}"
             for image_path in image_paths:
-                Script.create_folders_and_place_files(folder_name, image_path)
+                Script.create_folders_and_place_files(desktop_location,folder_name, image_path)
                 files_moved += 1
 
         summary = {
@@ -173,23 +180,43 @@ class Script:
         '''
         Function to run the Script every 24 hours (or any other time periods that you want)
         '''
+
+        cron = CronTab(user=True)
+        existing_jobs = cron.find_comment("SCAR SCRIPT: Screenshpt Organization Script")
+
+        if existing_jobs:
+            print("Cron job for this script already exists. You can't create a duplicate one.")
+            return
+        
         # get path to current script and python interpreter
         script_path = os.path.abspath(__file__)
         python_path = sys.executable
 
-        cron = CronTab(user=True)
-
         command = f"{python_path} {script_path}"
 
-        job = cron.new(command=command)
+        job = cron.new(command=command, comment="SCAR SCRIPT: Screenshpt Organization Script")
 
         # set job to run every wednesday at 12:00
         job.setall("0 12 * * 3")
 
         cron.write()
         print("Cron job created successfully")
+    
+    def delete_cron_job():
+        '''
+        Function to delete the Script's cron job
+        '''
+        cron = CronTab(user=True)
+        job = list(cron.find_comment("SCAR SCRIPT: Screenshpt Organization Script"))
+        
+        if not job:
+            print("Cron job for this script doesn't exist.")
+            return
+        
+        cron.remove(job[0])
+        cron.write()
+        print("Cron job deleted successfully")
 
 desktop_pathname = os.path.join(os.path.expanduser("~"), "Desktop")
 run = Script(desktop_pathname)
-run.main() # run once
-# run.setup_cron_job() # run multiple times over a set period
+run.main() # run once or multiple times
